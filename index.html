@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendataan Penjualan Obat UKS</title>
+
+<style>
+* { box-sizing: border-box; }
+body { font-family: Arial, sans-serif; background: #f2f6f7; margin: 0; padding: 20px; }
+.container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+h1, h2 { color: #c62828; text-align: center; }
+label { font-weight: bold; display: block; margin-top: 15px; }
+input, select, button { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #ccc; }
+button { background: #c62828; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 20px; }
+button:hover { background: #8e0000; }
+.login-box { max-width: 400px; margin: 50px auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.admin-button { background: #333; }
+.kembali, .hapus { background: #555; }
+table { width: 100%; border-collapse: collapse; margin-top: 25px; overflow-x: auto; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+th { background: #c62828; color: white; }
+.total { margin-top: 20px; font-size: 18px; font-weight: bold; text-align: right; }
+.hidden { display: none !important; }
+.status-bar { background: #e8f5e9; color: #2e7d32; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 15px; }
+@media (max-width: 700px) { table { font-size: 12px; } .container { padding: 15px; } }
+</style>
+</head>
+
+<body>
+
+<!-- ================= HALAMAN PENJUALAN ================= -->
+<div class="container" id="halamanPenjualan">
+    <div class="status-bar">🌐 Terhubung ke Server Cloud UKS (Realtime)</div>
+    <h1>🏥 Pendataan Penjualan Obat UKS</h1>
+
+    <label>Nama Pembeli</label>
+    <input type="text" id="nama" placeholder="Masukkan nama pembeli">
+
+    <label>Kelas</label>
+    <input type="text" id="kelas" placeholder="Contoh: XI TKJ 1">
+
+    <label>Pilih Obat</label>
+    <select id="obat" onchange="tampilkanHarga()"></select>
+
+    <label>Jumlah</label>
+    <input type="number" id="jumlah" min="1" value="1" oninput="tampilkanHarga()">
+
+    <label>Harga Satuan</label>
+    <input type="text" id="hargaSatuan" readonly placeholder="Harga satuan otomatis">
+
+    <label>Total Harga</label>
+    <input type="text" id="harga" readonly placeholder="Total harga otomatis">
+
+    <button id="btnTambah" onclick="tambahData()">Tambah Data Penjualan</button>
+
+    <button class="admin-button" onclick="bukaLogin()">🔐 Login Admin</button>
+
+    <table>
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Tanggal</th>
+                <th>Pembeli</th>
+                <th>Kelas</th>
+                <th>Obat</th>
+                <th>Jumlah</th>
+                <th>Harga Satuan</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody id="tabelData"></tbody>
+    </table>
+
+    <div class="total">
+        Total Semua Penjualan: <span id="totalSemua">Rp0</span>
+    </div>
+</div>
+
+<!-- ================= LOGIN ADMIN ================= -->
+<div class="login-box hidden" id="halamanLogin">
+    <h2>🔐 Login Admin</h2>
+    <label>Username</label>
+    <input type="text" id="username" placeholder="Masukkan username">
+
+    <label>Password</label>
+    <input type="password" id="password" placeholder="Masukkan password">
+
+    <button onclick="loginAdmin()">Login</button>
+    <button class="kembali" onclick="kembaliPenjualan()">Kembali</button>
+</div>
+
+<!-- ================= HALAMAN ADMIN ================= -->
+<div class="container hidden" id="halamanAdmin">
+    <h1>⚙️ Halaman Admin</h1>
+
+    <h2>➕ Tambah Daftar Obat</h2>
+    <label>Nama Obat</label>
+    <input type="text" id="namaObatBaru" placeholder="Contoh: Paracetamol">
+
+    <label>Harga Satuan</label>
+    <input type="number" id="hargaObatBaru" placeholder="Contoh: 1000">
+
+    <button onclick="tambahObat()">Tambah Obat</button>
+
+    <div style="margin-top:20px;">
+        <h2>📋 Daftar Obat Saat Ini</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Nama Obat</th>
+                    <th>Harga Satuan</th>
+                </tr>
+            </thead>
+            <tbody id="daftarObatAdmin"></tbody>
+        </table>
+    </div>
+
+    <button class="hapus" onclick="hapusData()">🗑️ Hapus Semua Data Penjualan</button>
+    <button class="kembali" onclick="logoutAdmin()">Keluar Admin</button>
+</div>
+
+<script>
+// BIN ID Server Cloud Terpusat Publik
+const API_URL = "https://api.jsonbin.io/v3/b/6601f221dc225c347970d2a1";
+const API_KEY = "$2a$10$C82KsmP.Hl6KOnrFzYmI/O.sC184X/RkQ5rP0X.q22T3zLq4kUoMu"; // Access Key Master
+
+let appState = {
+    daftarObat: [
+        {nama: "FEMINAX", harga: 1000},
+        {nama: "MIXAGRIP", harga: 1000},
+        {nama: "PROMAG", harga: 1000},
+        {nama: "BODREX", harga: 750},
+        {nama: "HANDSAPLAS", harga: 500},
+        {nama: "SOFTEX", harga: 2000},
+        {nama: "RHEUMACYL", harga: 750},
+        {nama: "SALONPLASS", harga: 1000},
+        {nama: "TOLAK ANGIN", harga: 4000}
+    ],
+    dataPenjualan: []
+};
+
+function formatRupiah(angka) {
+    return "Rp" + Number(angka).toLocaleString("id-ID");
+}
+
+// Ambil Data dari Server Cloud (Realtime Pull)
+async function muatDataCloud() {
+    try {
+        let response = await fetch(API_URL + "/latest", {
+            headers: { "X-Master-Key": API_KEY }
+        });
+        if(response.ok) {
+            let resJson = await response.json();
+            if (resJson.record && resJson.record.dataPenjualan) {
+                appState = resJson.record;
+            }
+        }
+    } catch(e) {
+        console.error("Gagal mengambil data dari cloud", e);
+    }
+    tampilkanDaftarObat();
+    tampilkanData();
+}
+
+// Simpan Perubahan ke Server Cloud
+async function simpanDataCloud() {
+    try {
+        await fetch(API_URL, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Master-Key": API_KEY
+            },
+            body: JSON.stringify(appState)
+        });
+    } catch(e) {
+        alert("Gagal sinkronisasi data ke cloud!");
+    }
+}
+
+function tampilkanDaftarObat() {
+    let select = document.getElementById("obat");
+    select.innerHTML = '<option value="">-- Pilih Obat --</option>';
+    appState.daftarObat.forEach((obat, index) => {
+        let option = document.createElement("option");
+        option.value = index;
+        option.textContent = obat.nama + " - " + formatRupiah(obat.harga);
+        select.appendChild(option);
+    });
+}
+
+function tampilkanHarga() {
+    let index = document.getElementById("obat").value;
+    let jumlah = parseInt(document.getElementById("jumlah").value) || 0;
+
+    if (index === "" || jumlah <= 0) {
+        document.getElementById("hargaSatuan").value = "";
+        document.getElementById("harga").value = "";
+        return;
+    }
+
+    let obat = appState.daftarObat[index];
+    document.getElementById("hargaSatuan").value = formatRupiah(obat.harga);
+    document.getElementById("harga").value = formatRupiah(obat.harga * jumlah);
+}
+
+async function tambahData() {
+    let nama = document.getElementById("nama").value.trim();
+    let kelas = document.getElementById("kelas").value.trim();
+    let index = document.getElementById("obat").value;
+    let jumlah = parseInt(document.getElementById("jumlah").value);
+
+    if (!nama || !kelas || index === "" || isNaN(jumlah) || jumlah <= 0) {
+        alert("Silakan lengkapi semua data!");
+        return;
+    }
+
+    let btn = document.getElementById("btnTambah");
+    btn.disabled = true;
+    btn.innerText = "Menyimpan ke Cloud...";
+
+    let obat = appState.daftarObat[index];
+    let sekarang = new Date();
+    let tanggal = sekarang.toLocaleDateString("id-ID") + " " + sekarang.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+
+    appState.dataPenjualan.push({
+        tanggal: tanggal,
+        nama: nama,
+        kelas: kelas,
+        obat: obat.nama,
+        jumlah: jumlah,
+        hargaSatuan: obat.harga,
+        total: obat.harga * jumlah
+    });
+
+    await simpanDataCloud();
+    await muatDataCloud();
+
+    document.getElementById("nama").value = "";
+    document.getElementById("kelas").value = "";
+    document.getElementById("obat").value = "";
+    document.getElementById("jumlah").value = 1;
+    document.getElementById("hargaSatuan").value = "";
+    document.getElementById("harga").value = "";
+
+    btn.disabled = false;
+    btn.innerText = "Tambah Data Penjualan";
+}
+
+function tampilkanData() {
+    let tabel = document.getElementById("tabelData");
+    tabel.innerHTML = "";
+    let totalSemua = 0;
+
+    appState.dataPenjualan.forEach((data, index) => {
+        totalSemua += Number(data.total);
+        tabel.innerHTML += `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${data.tanggal}</td>
+                <td>${data.nama}</td>
+                <td>${data.kelas}</td>
+                <td>${data.obat}</td>
+                <td>${data.jumlah}</td>
+                <td>${formatRupiah(data.hargaSatuan)}</td>
+                <td>${formatRupiah(data.total)}</td>
+            </tr>
+        `;
+    });
+
+    document.getElementById("totalSemua").innerText = formatRupiah(totalSemua);
+}
+
+// Fitur Admin
+function bukaLogin() {
+    document.getElementById("halamanPenjualan").classList.add("hidden");
+    document.getElementById("halamanLogin").classList.remove("hidden");
+}
+
+function kembaliPenjualan() {
+    document.getElementById("halamanLogin").classList.add("hidden");
+    document.getElementById("halamanPenjualan").classList.remove("hidden");
+}
+
+function loginAdmin() {
+    let u = document.getElementById("username").value;
+    let p = document.getElementById("password").value;
+    if (u === "admin" && p === "12345") {
+        document.getElementById("halamanLogin").classList.add("hidden");
+        document.getElementById("halamanAdmin").classList.remove("hidden");
+        tampilkanDaftarObatAdmin();
+    } else {
+        alert("Username atau password salah!");
+    }
+}
+
+function logoutAdmin() {
+    document.getElementById("halamanAdmin").classList.add("hidden");
+    document.getElementById("halamanPenjualan").classList.remove("hidden");
+}
+
+async function tambahObat() {
+    let nama = document.getElementById("namaObatBaru").value.trim().toUpperCase();
+    let harga = parseInt(document.getElementById("hargaObatBaru").value);
+
+    if (!nama || isNaN(harga) || harga <= 0) {
+        alert("Masukkan nama dan harga obat dengan benar!");
+        return;
+    }
+
+    appState.daftarObat.push({ nama: nama, harga: harga });
+    await simpanDataCloud();
+    await muatDataCloud();
+
+    document.getElementById("namaObatBaru").value = "";
+    document.getElementById("hargaObatBaru").value = "";
+    tampilkanDaftarObatAdmin();
+}
+
+function tampilkanDaftarObatAdmin() {
+    let tabel = document.getElementById("daftarObatAdmin");
+    tabel.innerHTML = "";
+    appState.daftarObat.forEach((obat, index) => {
+        tabel.innerHTML += `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${obat.nama}</td>
+                <td>${formatRupiah(obat.harga)}</td>
+            </tr>
+        `;
+    });
+}
+
+async function hapusData() {
+    if (confirm("Yakin ingin menghapus semua data transaksi di cloud?")) {
+        appState.dataPenjualan = [];
+        await simpanDataCloud();
+        await muatDataCloud();
+        alert("Semua data berhasil dihapus.");
+    }
+}
+
+// Auto Fetch setiap 5 detik agar selalu realtime di semua device
+setInterval(muatDataCloud, 5000);
+muatDataCloud();
+</script>
+
+</body>
+</html>
